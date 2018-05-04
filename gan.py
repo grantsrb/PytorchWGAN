@@ -1,13 +1,21 @@
-import torch.nn
+import torch.nn as nn
+import torch
+from torch.autograd import Variable
 import numpy as np
 
-class GAN(nn.Module()):
+class GAN(nn.Module):
+
+    def cuda_if(self, tobj):
+        if torch.cuda.is_available():
+            tobj = tobj.cuda()
+        return tobj
     
     def __init__(self, img_shape, z_size=100, emb_size=200, bnorm=False):
         super(GAN, self).__init__()
         self.emb_size = emb_size
         self.z_size = z_size
-        self.flat_img = np.prod(img_shape[-3:])
+        self.img_shape = img_shape
+        self.flat_img = int(np.prod(img_shape[-3:]))
         self.bnorm = bnorm
 
         # Discriminator
@@ -27,9 +35,17 @@ class GAN(nn.Module()):
             gener.append(nn.BatchNorm1d(self.emb_size))
         gener.append(nn.Linear(self.emb_size, self.flat_img))
         self.generator = nn.Sequential(*gener)
+    
+    def generate(self, n):
+        """
+        n - integer denoting number of samples to generate
+        """
+        zs = Variable(self.cuda_if(torch.randn(n,self.z_size)))
+        return self.generator(zs)
 
-        def generate(self, z):
-            return self.generator(z)
+    def discriminate(self, x):
+        return self.discriminator(x)
 
-        def discriminate(self, x):
-            return self.discriminator(x)
+    def clip_ds_ps(self, clip_coef):
+        for p in self.discriminator.parameters():
+            p.data.clamp_(-clip_coef, clip_coef)
