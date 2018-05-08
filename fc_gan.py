@@ -10,13 +10,14 @@ class GAN(nn.Module):
             tobj = tobj.cuda()
         return tobj
     
-    def __init__(self, img_shape, z_size=100, emb_size=200, bnorm=False):
+    def __init__(self, img_shape, z_size=100, emb_size=200, bnorm=False, z_std=1):
         super(GAN, self).__init__()
         self.emb_size = emb_size
         self.z_size = z_size
         self.img_shape = img_shape
         self.flat_img = int(np.prod(img_shape[-3:]))
         self.bnorm = bnorm
+        self.z_std = z_std
 
         # Discriminator
         discrim = []
@@ -36,11 +37,12 @@ class GAN(nn.Module):
         gener.append(nn.Linear(self.emb_size, self.flat_img))
         self.generator = nn.Sequential(*gener)
     
-    def generate(self, n):
+    def generate(self, n, std=1.):
         """
         n - integer denoting number of samples to generate
+        std - float or FloatTensor of standard deviations
         """
-        zs = Variable(self.cuda_if(torch.randn(n,self.z_size)))
+        zs = Variable(self.cuda_if(torch.randn(n,self.z_size)*self.z_std))
         return self.generator(zs)
 
     def discriminate(self, x):
