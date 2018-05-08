@@ -2,7 +2,6 @@ import torch.optim as optim
 from torch.autograd import Variable
 import torch
 import numpy as np
-from PIL import Image
 
 class Trainer:
     def cuda_if(self, tobj):
@@ -48,25 +47,20 @@ class Trainer:
         f_loss.backward()
         self.gen_optim.step()
 
-    def print_statistics(self):
-        print("Avg Real:",self.avg_real, "– Avg Fake:",self.avg_fake,
-                           "– Diff:",abs(self.avg_real-self.avg_fake))
+    def print_statistics(self, epoch):
+        diff = abs(self.avg_real-self.avg_fake)
+        print("Epoch:", epoch, "– Avg Real:",self.avg_real, "– Avg Fake:",self.avg_fake,
+                           "– Diff:",diff)
+        return diff
 
     def save_model(self, save_root):
         torch.save(self.gan.state_dict(), save_root+"_gan.p")
         torch.save(self.disc_optim.state_dict(), save_root+"_d_optim.p")
         torch.save(self.gen_optim.state_dict(), save_root+"_g_optim.p")
 
-    def save_imgs(self, save_root, n_imgs=10):
+    def get_imgs(self, n_imgs=10):
         imgs = self.fakes.data.cpu().numpy()
         imgs = imgs[:n_imgs]
-        imgs = imgs.reshape((-1, *self.gan.img_shape[-3:])).transpose((0,2,3,1)).astype(np.uint8)
-        for i,img in enumerate(imgs):
-            png = Image.fromarray(img)
-            png.save(save_root+"_img"+str(i)+".png")
-        
-
-
-            
-
+        imgs = imgs.reshape((-1, *self.gan.img_shape[-3:])).transpose((0,2,3,1))
+        return imgs
         
