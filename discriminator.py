@@ -22,21 +22,11 @@ class Discriminator(nn.Module):
         self.convs = nn.ModuleList([])
         shape = [*self.img_shape[-3:]]
 
-        ksize=3; padding=1; stride=1; out_depth = 16
+        ksize=3; padding=1; stride=1; out_depth = 32
         self.convs.append(self.conv_block(img_shape[-3], out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
-        ksize=3; padding=1; stride=1; in_depth=out_depth
-        out_depth = 32
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
-        shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
-
-        ksize=3; padding=1; stride=2; in_depth = out_depth
-        out_depth = 64
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
-        shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
-
-        ksize=3; padding=1; stride=2; in_depth = out_depth
+        ksize=3; padding=1; stride=2; in_depth=out_depth
         out_depth = 64
         self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
@@ -46,15 +36,24 @@ class Discriminator(nn.Module):
         self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
+        ksize=3; padding=1; stride=2; in_depth = out_depth
+        out_depth = 256
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
+        shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
+
+        ksize=3; padding=1; stride=2; in_depth = out_depth
+        out_depth = 512
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
+
+        shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
         self.features = nn.Sequential(*self.convs)
         self.feat_shape = shape
         self.flat_size = int(np.prod(shape))
+        print("Flat size:", self.flat_size)
 
         # Classifier
         block = []
-        block.append(nn.Linear(self.flat_size, 300))
-        block.append(nn.ReLU())
-        block.append(nn.Linear(300,1))
+        block.append(nn.Linear(self.flat_size, 1))
         self.classifier = nn.Sequential(*block)
 
     def get_new_shape(self, old_shape, depth, ksize=3, stride=1, padding=1):
@@ -77,7 +76,7 @@ class Discriminator(nn.Module):
         for p in self.parameters():
             p.data.clamp_(-clip_coef, clip_coef)
 
-    def conv_block(self,in_depth,out_depth,ksize=3,stride=1,padding=1,activation='relu',bnorm=False):
+    def conv_block(self,in_depth,out_depth,ksize=3,stride=1,padding=1,activation='leaky',bnorm=False):
         block = []
         block.append(nn.Conv2d(in_depth, out_depth, ksize, stride=stride, padding=padding))
         if activation is None:
@@ -86,8 +85,23 @@ class Discriminator(nn.Module):
             block.append(nn.ReLU())
         elif activation.lower() == 'tanh':
             block.append(nn.Tanh())
+        elif activation.lower() == 'leaky':
+            block.append(nn.LeakyReLU(negative_slope=0.05))
         if bnorm:
             block.append(nn.BatchNorm2d(out_depth))
         return nn.Sequential(*block)
 
-    
+    def res_block(self, in_depth, out_depth, ksize=3, padding=1, activation='relu', bnorm=False):
+        block = []
+        block.append(nn.Conv2d(in_depth, out_depth, ksize, padding=padding))
+        if activation is None:
+            pass
+        elif activation.lower() == 'relu':
+            block.append(nn.ReLU())
+        elif activation.lower() == 'tanh':
+            block.append(nn.Tanh())
+        if bnorm:
+            block.append(nn.BatchNorm2d(out_depth))
+        block.append(nn.Conv2d(out_depth, in_depth, ksize, padding=padding))
+        return nn.Sequential(*block)
+
