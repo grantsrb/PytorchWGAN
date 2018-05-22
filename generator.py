@@ -10,7 +10,7 @@ class Generator(nn.Module):
             tobj = tobj.cuda()
         return tobj
 
-    def __init__(self, img_shape, z_size=100, trainable_z=False, bnorm=False):
+    def __init__(self, img_shape, z_size=100, trainable_z=False, bnorm=False, use_tanh=False):
         """
         img_shape - the size of the input data. Shape = (..., C, H, W)
         """
@@ -46,7 +46,10 @@ class Generator(nn.Module):
 
         ksize=3; padding=1; stride=1; in_depth = out_depth
         out_depth = self.img_shape[-3]
-        self.deconvs.append(self.deconv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, activation=None, bnorm=False))
+        if use_tanh:
+            self.deconvs.append(self.deconv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, activation="tanh", bnorm=False))
+        else:
+            self.deconvs.append(self.deconv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, activation=None, bnorm=False))
 
         self.generator = nn.Sequential(*self.deconvs)
 

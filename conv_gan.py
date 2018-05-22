@@ -4,7 +4,7 @@ from generator import Generator
 
 class DCGAN(nn.Module):
 
-    def __init__(self, img_shape, z_size=100, trainable_z=False, disc_bnorm=True, gen_bnorm=True):
+    def __init__(self, img_shape, z_size=100, trainable_z=False, disc_bnorm=True, gen_bnorm=True, use_tanh=False):
         """
         img_shape - the size of the input data. Shape = (..., C, H, W)
         """
@@ -12,7 +12,7 @@ class DCGAN(nn.Module):
         self.img_shape = img_shape
 
         self.discriminator = Discriminator(img_shape, bnorm=disc_bnorm)
-        self.generator = Generator(img_shape, z_size=z_size, trainable_z=trainable_z, bnorm=gen_bnorm)
+        self.generator = Generator(img_shape, z_size=z_size, trainable_z=trainable_z, bnorm=gen_bnorm, use_tanh=use_tanh)
 
     def discriminate(self, x):
         return self.discriminator(x)

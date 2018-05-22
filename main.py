@@ -32,7 +32,7 @@ def save_imgs(fakes, save_root):
 
 if __name__ == "__main__":
 
-    save_root = "mnist"
+    save_root = "gradclip"
     img_folder = save_root+"_imgs"
     max_epochs = int(1e7)
     n_critic = 6
@@ -40,16 +40,19 @@ if __name__ == "__main__":
     disc_lr = 5e-4
     gen_lr = 1e-4
     clip_coef = .01
+    lambda_ = 10
     z_size = 100
     convergence_bound = 1e-13
     model_type='conv'
-    scale = True
+    grad_based_training = True
+    use_tanh = False
+    scale = False
     trainable_z = True
-    disc_bnorm = True
+    disc_bnorm = False
     gen_bnorm = True
-    process = False
+    process = True
     resume = False
-    data_type = "mnist"
+    data_type = "traffic"
 
     if "traffic" == data_type:
         data_loc = "/home/grantsrb/machine_learning/datasets/traffic_sign_data"
@@ -73,9 +76,12 @@ if __name__ == "__main__":
     mean = float(imgs.mean())
     std = float(imgs.std())
     imgs = cuda_if(torch.FloatTensor(imgs.transpose((0,3,1,2))))
-    if scale:
+    if use_tanh:
+        std = torch.max(imgs-mean)
+        imgs = preprocess(imgs, mean, std)
+    elif scale:
         imgs = scale_down(imgs)
-    if process:
+    elif process:
         imgs = preprocess(imgs, mean, std)
     
     if model_type.lower() == "fc" or model_type.lower() == "dense":
@@ -83,7 +89,7 @@ if __name__ == "__main__":
     elif model_type.lower() == "conv":
         GAN = conv_gan.DCGAN
 
-    gan = GAN(imgs.shape,z_size=z_size,trainable_z=trainable_z,disc_bnorm=disc_bnorm,gen_bnorm=gen_bnorm)
+    gan = GAN(imgs.shape,z_size=z_size,trainable_z=trainable_z,disc_bnorm=disc_bnorm,gen_bnorm=gen_bnorm, use_tanh=use_tanh)
     gan = cuda_if(gan)
     trainer = Trainer(gan, gen_lr=gen_lr, disc_lr=disc_lr)
     if resume:
@@ -114,7 +120,10 @@ if __name__ == "__main__":
         counter += 1
         reals = imgs[idxs]
 
-        trainer.train(reals, batch_size=batch_size, clip_coef=clip_coef, n_critic=temp_n_critic)
+        if grad_based_training:
+            trainer.grad_based_train(reals, batch_size=batch_size, lambda_=lambda_, n_critic=temp_n_critic)
+        else:
+            trainer.train(reals, batch_size=batch_size, clip_coef=clip_coef, n_critic=temp_n_critic)
         disc_loss, gen_loss = trainer.get_statistics(epoch)
         d_losses.append(disc_loss)
         g_losses.append(gen_loss)
@@ -124,7 +133,7 @@ if __name__ == "__main__":
             fakes = trainer.get_imgs(n_imgs)
             if scale:
                 fakes = scale_up(fakes)
-            if process:
+            if process or use_tanh:
                 fakes = postprocess(fakes, mean, std)
             save_imgs(fakes.astype(np.uint8), save_root)
             if epoch % 1000 == 0:
