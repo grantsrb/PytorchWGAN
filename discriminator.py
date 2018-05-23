@@ -2,6 +2,7 @@ import torch
 from torch.autograd import Variable
 import torch.nn as nn
 import numpy as np
+from vbnorm import VirtBatchNorm2d
 
 class Discriminator(nn.Module):
 
@@ -10,40 +11,41 @@ class Discriminator(nn.Module):
             tobj = tobj.cuda()
         return tobj
 
-    def __init__(self, img_shape, bnorm=False):
+    def __init__(self, img_shape, bnorm=False, virt_bnorm=False):
         """
         img_shape - the size of the input data. Shape = (..., C, H, W)
         """
         super(Discriminator, self).__init__()
         self.img_shape = img_shape
         self.bnorm = bnorm
+        self.virt_bnorm = virt_bnorm
 
         # Discriminator
         self.convs = nn.ModuleList([])
         shape = [*self.img_shape[-3:]]
 
         ksize=3; padding=1; stride=1; out_depth = 32
-        self.convs.append(self.conv_block(img_shape[-3], out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
+        self.convs.append(self.conv_block(img_shape[-3], out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
         ksize=3; padding=1; stride=2; in_depth=out_depth
         out_depth = 64
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
         ksize=3; padding=1; stride=2; in_depth = out_depth
         out_depth = 128
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
         ksize=3; padding=1; stride=2; in_depth = out_depth
         out_depth = 256
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
         ksize=3; padding=1; stride=2; in_depth = out_depth
         out_depth = 512
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm))
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
 
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
         self.features = nn.Sequential(*self.convs)
@@ -64,19 +66,19 @@ class Discriminator(nn.Module):
 
     def discriminate(self, x):
         fx = self.features(x)
-        fx = fx.view(len(fx), -1)
+        fx = fx.contiguous().view(len(fx), -1)
         return self.classifier(fx)
 
     def forward(self, x):
         fx = self.features(x)
-        fx = fx.view(len(fx), -1)
+        fx = fx.contiguous().view(len(fx), -1)
         return self.classifier(fx)
 
     def clip_ds_ps(self, clip_coef):
         for p in self.parameters():
             p.data.clamp_(-clip_coef, clip_coef)
 
-    def conv_block(self,in_depth,out_depth,ksize=3,stride=1,padding=1,activation='leaky',bnorm=False):
+    def conv_block(self,in_depth,out_depth,ksize=3,stride=1,padding=1,activation='leaky',bnorm=False, virt_bnorm=False):
         block = []
         block.append(nn.Conv2d(in_depth, out_depth, ksize, stride=stride, padding=padding))
         if activation is None:
@@ -88,7 +90,10 @@ class Discriminator(nn.Module):
         elif activation.lower() == 'leaky':
             block.append(nn.LeakyReLU(negative_slope=0.05))
         if bnorm:
-            block.append(nn.BatchNorm2d(out_depth))
+            if virt_bnorm:
+                block.append(VirtBatchNorm2d(out_depth))
+            else:
+                block.append(nn.BatchNorm2d(out_depth))
         return nn.Sequential(*block)
 
     def res_block(self, in_depth, out_depth, ksize=3, padding=1, activation='relu', bnorm=False):

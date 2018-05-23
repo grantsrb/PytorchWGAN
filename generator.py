@@ -76,15 +76,3 @@ class Generator(nn.Module):
             block.append(nn.BatchNorm2d(out_depth))
         return nn.Sequential(*block)
         
-    def conv_block(self,in_depth,out_depth,ksize=3,stride=1,padding=1,activation='relu',bnorm=False):
-        block = []
-        block.append(nn.Conv2d(in_depth, out_depth, ksize, stride=stride, padding=padding))
-        if activation is None:
-            pass
-        elif activation.lower() == 'relu':
-            block.append(nn.ReLU())
-        elif activation.lower() == 'tanh':
-            block.append(nn.Tanh())
-        if bnorm:
-            block.append(nn.BatchNorm2d(out_depth))
-        return nn.Sequential(*block)

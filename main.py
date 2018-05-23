@@ -6,6 +6,10 @@ from trainer import Trainer
 from PIL import Image
 import numpy as np
 import pickle
+import gc
+import resource
+import time
+import os
 
 def preprocess(imgs, mean, std):
     return (imgs-mean)/(std+1e-7)
@@ -32,13 +36,15 @@ def save_imgs(fakes, save_root):
 
 if __name__ == "__main__":
 
-    save_root = "gradclip"
+    save_root = "grad_w_vbnorm"
     img_folder = save_root+"_imgs"
+    if not os.path.exists(img_folder):
+        os.makedirs(img_folder)
     max_epochs = int(1e7)
-    n_critic = 6
+    n_critic = 5
     batch_size = 64
-    disc_lr = 5e-4
-    gen_lr = 1e-4
+    disc_lr = 5e-5
+    gen_lr = 5e-5
     clip_coef = .01
     lambda_ = 10
     z_size = 100
@@ -50,6 +56,7 @@ if __name__ == "__main__":
     trainable_z = True
     disc_bnorm = False
     gen_bnorm = True
+    vbnorm = True
     process = True
     resume = False
     data_type = "traffic"
@@ -89,7 +96,7 @@ if __name__ == "__main__":
     elif model_type.lower() == "conv":
         GAN = conv_gan.DCGAN
 
-    gan = GAN(imgs.shape,z_size=z_size,trainable_z=trainable_z,disc_bnorm=disc_bnorm,gen_bnorm=gen_bnorm, use_tanh=use_tanh)
+    gan = GAN(imgs.shape,z_size=z_size,trainable_z=trainable_z,disc_bnorm=disc_bnorm,gen_bnorm=gen_bnorm,vbnorm=vbnorm,use_tanh=use_tanh)
     gan = cuda_if(gan)
     trainer = Trainer(gan, gen_lr=gen_lr, disc_lr=disc_lr)
     if resume:
@@ -98,12 +105,18 @@ if __name__ == "__main__":
     perm = cuda_if(torch.randperm(len(imgs)).long())
     if model_type.lower() == "fc" or model_type.lower() == "dense":
         imgs = imgs.view(len(imgs), -1)
-    #reals = imgs[:n_samples]
+
+    if vbnorm:
+        virtual_idxs = perm[:batch_size]
+        virtual_batch = imgs[virtual_idxs]
+    else:
+        virtual_batch = None
     counter = 0
     best_diff = 2
     d_losses = []
     g_losses = []
 
+    basetime = time.time()
     for epoch in range(max_epochs):
 
         if (epoch % 100 == 0 and epoch < 1000) or (epoch % 500 == 0):
@@ -121,9 +134,9 @@ if __name__ == "__main__":
         reals = imgs[idxs]
 
         if grad_based_training:
-            trainer.grad_based_train(reals, batch_size=batch_size, lambda_=lambda_, n_critic=temp_n_critic)
+            trainer.grad_based_train(reals, batch_size=batch_size, lambda_=lambda_, n_critic=temp_n_critic, virtual_batch=virtual_batch)
         else:
-            trainer.train(reals, batch_size=batch_size, clip_coef=clip_coef, n_critic=temp_n_critic)
+            trainer.train(reals, batch_size=batch_size, clip_coef=clip_coef, n_critic=temp_n_critic, virtual_batch=virtual_batch)
         disc_loss, gen_loss = trainer.get_statistics(epoch)
         d_losses.append(disc_loss)
         g_losses.append(gen_loss)
@@ -141,4 +154,10 @@ if __name__ == "__main__":
                 np.save(save_root+"_d_losses.npy", np.asarray(d_losses))
                 np.save(save_root+"_g_losses.npy", np.asarray(g_losses))
             trainer.save_model(save_root)
-    
+
+            # Check for memory leaks
+            gc.collect()
+            max_mem_used = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            print("Time:", time.time()-basetime)
+            basetime = time.time()
+            print("Memory Used: {:.2f} memory\n".format(max_mem_used / 1024))
