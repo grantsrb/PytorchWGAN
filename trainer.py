@@ -10,18 +10,17 @@ class Trainer:
             tobj = tobj.cuda()
         return tobj
 
-    def __init__(self, gan, gen_lr=5e-5, disc_lr=5e-5, grad_norm=False):
+    def __init__(self, gan, gen_lr=5e-5, disc_lr=5e-5, optim_type='adam'):
         self.gan = gan
-        self.disc_optim = optim.RMSprop(gan.discriminator.parameters(), lr=disc_lr)
-        self.gen_optim = optim.RMSprop(gan.generator.parameters(), lr=gen_lr)
+        self.disc_optim = self.new_optim(optim_type, gan.discriminator.parameters(), disc_lr)
+        self.gen_optim = self.new_optim(optim_type, gan.generator.parameters(), gen_lr)
         self.avg_real = 0
         self.avg_fake = 0
-        self.grad_norm = grad_norm
 
-    def get_losses(self, reals, fakes, virtual_batch):
-        if virtual_batch is not None:
-            start_idx = len(virtual_batch)
-            x = torch.cat([virtual_batch, reals, fakes], dim=0)
+    def get_losses(self, reals, fakes, disc_virtuals):
+        if disc_virtuals is not None:
+            start_idx = len(disc_virtuals)
+            x = torch.cat([disc_virtuals, reals, fakes], dim=0)
         else:
             start_idx = 0
             x = torch.cat([reals, fakes], dim=0)
@@ -31,13 +30,13 @@ class Trainer:
         f_loss = loss[mid_idx:]
         return r_loss, f_loss
 
-    def get_grad_loss(self, reals, fakes, virtual_batch, lambda_):
+    def get_grad_loss(self, reals, fakes, disc_virtuals, lambda_):
         epsilon = self.cuda_if(torch.randn(len(reals)))
         combo = reals.data.permute(1,2,3,0)*epsilon + fakes.data.permute(1,2,3,0)*(1-epsilon)
         combo = Variable(combo.permute(3,0,1,2), requires_grad=True)
-        if virtual_batch is not None:
-            x = torch.cat([Variable(virtual_batch), combo], dim=0)
-            start_idx = len(virtual_batch)
+        if disc_virtuals is not None:
+            x = torch.cat([Variable(disc_virtuals), combo], dim=0)
+            start_idx = len(disc_virtuals)
         else:
             x = combo
             start_idx = 0
@@ -46,16 +45,16 @@ class Trainer:
         gradnorms = (grads.view(len(reals), -1).norm(2, dim=-1)-1).pow(2)
         return lambda_*gradnorms
 
-    def train(self, reals, batch_size=64, clip_coef=.01, n_critic=5, virtual_batch=None):
+    def train(self, reals, batch_size=64, clip_coef=.01, n_critic=5, disc_virtuals=None, gen_virtuals=None):
         perm = self.cuda_if(torch.randperm(len(reals)).long())
 
         # Discrim Updating
         for i in range(n_critic):
-            fakes = self.gan.generate(batch_size)
+            fakes = self.gan.generate(batch_size, gen_virtuals)[-batch_size:]
             self.disc_optim.zero_grad()
 
             idxs = perm[i*batch_size:(i+1)*batch_size]
-            r_loss, f_loss = self.get_losses(Variable(reals[idxs]), Variable(fakes.data), virtual_batch)
+            r_loss, f_loss = self.get_losses(Variable(reals[idxs]), Variable(fakes.data), disc_virtuals)
 
             disc_loss = f_loss.mean() - r_loss.mean() # Seek to maximize r_loss
             disc_loss.backward()
@@ -69,22 +68,29 @@ class Trainer:
 
         # Generator Updating
         self.gen_optim.zero_grad()
-        self.fakes = self.gan.generate(batch_size) 
-        f_loss = -self.gan.discriminate(self.fakes).mean()
+        self.fakes = self.gan.generate(batch_size, gen_virtuals)[-batch_size:]
+        if disc_virtuals is not None:
+            start_idx = len(disc_virtuals)
+            x = torch.cat([disc_virtuals, self.fakes], dim=0)
+        else:
+            start_idx = 0
+            x = self.fakes
+        loss = self.gan.discriminate(x)
+        f_loss = -loss[start_idx:].mean()
         f_loss.backward()
         self.gen_optim.step()
 
-    def grad_based_train(self, reals, batch_size=64, n_critic=5, lambda_=10, virtual_batch=None):
+    def improved_train(self, reals, batch_size=64, n_critic=5, lambda_=10, disc_virtuals=None, gen_virtuals=None):
         perm = self.cuda_if(torch.randperm(len(reals)).long())
 
         # Discrim Updating
         for i in range(n_critic):
-            fakes = self.gan.generate(batch_size)
+            fakes = self.gan.generate(batch_size, gen_virtuals)[-batch_size:]
 
             idxs = perm[i*batch_size:(i+1)*batch_size]
-            r_loss, f_loss = self.get_losses(Variable(reals[idxs]), Variable(fakes.data), virtual_batch)
+            r_loss, f_loss = self.get_losses(Variable(reals[idxs]), Variable(fakes.data), disc_virtuals)
 
-            grad_loss = self.get_grad_loss(reals[idxs], fakes.data, virtual_batch, lambda_)
+            grad_loss = self.get_grad_loss(reals[idxs], fakes.data, disc_virtuals, lambda_)
 
             step = f_loss.squeeze() - r_loss.squeeze() + grad_loss.squeeze()
             disc_loss = step.mean()
@@ -98,8 +104,15 @@ class Trainer:
 
         # Generator Updating
         self.gen_optim.zero_grad()
-        self.fakes = self.gan.generate(batch_size) 
-        f_loss = -self.gan.discriminate(self.fakes).mean()
+        self.fakes = self.gan.generate(batch_size, gen_virtuals)[-batch_size:]
+        if disc_virtuals is not None:
+            start_idx = len(disc_virtuals)
+            x = torch.cat([disc_virtuals, self.fakes], dim=0)
+        else:
+            start_idx = 0
+            x = self.fakes
+        loss = self.gan.discriminate(x)
+        f_loss = -loss[start_idx:].mean()
         f_loss.backward()
         self.gen_optim.step()
 
@@ -127,4 +140,12 @@ class Trainer:
         imgs = imgs[:n_imgs]
         imgs = imgs.reshape((-1, *self.gan.img_shape[-3:])).transpose((0,2,3,1))
         return imgs
-        
+  
+    def new_optim(self, optim_type, params, lr):
+        if optim_type == 'rmsprop':
+            opt = optim.RMSprop(params, lr=lr) 
+        elif optim_type == 'adam':
+            opt = optim.Adam(params, lr=lr) 
+        else:
+            opt = optim.RMSprop(params, lr=lr) 
+        return opt

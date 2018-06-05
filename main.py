@@ -29,37 +29,38 @@ def cuda_if(tobj):
     return tobj
 
 def save_imgs(fakes, save_root):
-    fakes = fakes.squeeze()
+    fakes = fakes.squeeze().astype(np.uint8)
     for i,img in enumerate(fakes):
         png = Image.fromarray(img)
         png.save(save_root+"_img"+str(i)+".png")
 
 if __name__ == "__main__":
 
-    save_root = "grad_w_vbnorm"
-    img_folder = save_root+"_imgs"
+    save_root = "biggenadam" # Root name to save various datas to
+    img_folder = save_root+"_imgs" # Name of folder to collect images created from GAN
     if not os.path.exists(img_folder):
         os.makedirs(img_folder)
     max_epochs = int(1e7)
-    n_critic = 5
+    n_critic = 5 # Number of training loops to perform on discriminator for every update to optimizer
     batch_size = 64
-    disc_lr = 5e-5
-    gen_lr = 5e-5
-    clip_coef = .01
-    lambda_ = 10
-    z_size = 100
-    convergence_bound = 1e-13
-    model_type='conv'
-    grad_based_training = True
-    use_tanh = False
-    scale = False
-    trainable_z = True
-    disc_bnorm = False
-    gen_bnorm = True
-    vbnorm = True
-    process = True
-    resume = False
-    data_type = "traffic"
+    disc_lr = 1e-4 # Learning rate used for discriminator
+    gen_lr = 5e-5 # Learning rate used for generator
+    clip_coef = .01 # Grad clipping constant used in original Wasserstein GAN https://arxiv.org/abs/1701.07875
+    lambda_ = 10 # Scaling constant used in Imrpoved Training of WGANs https://arxiv.org/abs/1704.00028
+    z_size = 100 # Size of the initial randomly sampled vector for the generator
+    model_type = 'conv' # Currently conv is the only option
+    optim_type = 'adam' # Available options are 'adam' and 'rmsprop'
+    improved_training = True # if true, uses this approach to training: https://arxiv.org/abs/1704.00028
+    use_tanh = False # If set to true uses a tanh on the outputs of the generator
+    scale = False # If set to true, scales the real dataset by 1/255
+    trainable_z = True # If set to true, the generator's z vector mean and std are trainable parameters
+    disc_bnorm = False # Uses batch norm in the discriminator
+    disc_vbnorm = False # Uses virtual batch norm in the discriminator
+    gen_bnorm = True # Uses batch norm in the generator
+    gen_vbnorm = False # Uses virtual batch norm in the generator
+    process = True # If set to true, normalizes the real dataset using a mean and std calculated over the entire dataset
+    resume = False # If true, resumes training of the network under the save_root name
+    data_type = "traffic" # Dataset options include traffic, cifar10, and mnist
 
     if "traffic" == data_type:
         data_loc = "/home/grantsrb/machine_learning/datasets/traffic_sign_data"
@@ -96,9 +97,9 @@ if __name__ == "__main__":
     elif model_type.lower() == "conv":
         GAN = conv_gan.DCGAN
 
-    gan = GAN(imgs.shape,z_size=z_size,trainable_z=trainable_z,disc_bnorm=disc_bnorm,gen_bnorm=gen_bnorm,vbnorm=vbnorm,use_tanh=use_tanh)
+    gan = GAN(imgs.shape,z_size=z_size,trainable_z=trainable_z,disc_bnorm=disc_bnorm,disc_vbnorm=disc_vbnorm,gen_bnorm=gen_bnorm,gen_vbnorm=gen_vbnorm,use_tanh=use_tanh)
     gan = cuda_if(gan)
-    trainer = Trainer(gan, gen_lr=gen_lr, disc_lr=disc_lr)
+    trainer = Trainer(gan, gen_lr=gen_lr, disc_lr=disc_lr, optim_type=optim_type)
     if resume:
         trainer.load_model(save_root)
 
@@ -106,11 +107,17 @@ if __name__ == "__main__":
     if model_type.lower() == "fc" or model_type.lower() == "dense":
         imgs = imgs.view(len(imgs), -1)
 
-    if vbnorm:
-        virtual_idxs = perm[:batch_size]
-        virtual_batch = imgs[virtual_idxs]
+    if disc_vbnorm:
+        idxs = perm[:batch_size]
+        disc_virtuals = imgs[idxs]
     else:
-        virtual_batch = None
+        disc_virtuals = None
+
+    if gen_vbnorm:
+        gen_virtuals = gan.generator.get_zs(batch_size) # returns torch FloatTensor from N(0,1)
+    else:
+        gen_virtuals = None
+
     counter = 0
     best_diff = 2
     d_losses = []
@@ -133,10 +140,10 @@ if __name__ == "__main__":
         counter += 1
         reals = imgs[idxs]
 
-        if grad_based_training:
-            trainer.grad_based_train(reals, batch_size=batch_size, lambda_=lambda_, n_critic=temp_n_critic, virtual_batch=virtual_batch)
+        if improved_training:
+            trainer.improved_train(reals, batch_size=batch_size, lambda_=lambda_, n_critic=temp_n_critic, disc_virtuals=disc_virtuals, gen_virtuals=gen_virtuals)
         else:
-            trainer.train(reals, batch_size=batch_size, clip_coef=clip_coef, n_critic=temp_n_critic, virtual_batch=virtual_batch)
+            trainer.train(reals, batch_size=batch_size, clip_coef=clip_coef, n_critic=temp_n_critic, disc_virtuals=disc_virtuals, gen_virtuals=gen_virtuals)        
         disc_loss, gen_loss = trainer.get_statistics(epoch)
         d_losses.append(disc_loss)
         g_losses.append(gen_loss)

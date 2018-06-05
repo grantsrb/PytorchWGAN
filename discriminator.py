@@ -11,41 +11,41 @@ class Discriminator(nn.Module):
             tobj = tobj.cuda()
         return tobj
 
-    def __init__(self, img_shape, bnorm=False, virt_bnorm=False):
+    def __init__(self, img_shape, bnorm=False, vbnorm=False):
         """
         img_shape - the size of the input data. Shape = (..., C, H, W)
         """
         super(Discriminator, self).__init__()
         self.img_shape = img_shape
         self.bnorm = bnorm
-        self.virt_bnorm = virt_bnorm
+        self.vbnorm = vbnorm
 
         # Discriminator
         self.convs = nn.ModuleList([])
         shape = [*self.img_shape[-3:]]
 
         ksize=3; padding=1; stride=1; out_depth = 32
-        self.convs.append(self.conv_block(img_shape[-3], out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
+        self.convs.append(self.conv_block(img_shape[-3], out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, vbnorm=vbnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
         ksize=3; padding=1; stride=2; in_depth=out_depth
         out_depth = 64
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, vbnorm=vbnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
         ksize=3; padding=1; stride=2; in_depth = out_depth
         out_depth = 128
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, vbnorm=vbnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
         ksize=3; padding=1; stride=2; in_depth = out_depth
         out_depth = 256
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, vbnorm=vbnorm))
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
 
         ksize=3; padding=1; stride=2; in_depth = out_depth
         out_depth = 512
-        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, virt_bnorm=virt_bnorm))
+        self.convs.append(self.conv_block(in_depth, out_depth, ksize=ksize, padding=padding, stride=stride, bnorm=self.bnorm, vbnorm=vbnorm))
 
         shape = self.get_new_shape(shape, out_depth, ksize=ksize, stride=stride, padding=padding)
         self.features = nn.Sequential(*self.convs)
@@ -78,7 +78,7 @@ class Discriminator(nn.Module):
         for p in self.parameters():
             p.data.clamp_(-clip_coef, clip_coef)
 
-    def conv_block(self,in_depth,out_depth,ksize=3,stride=1,padding=1,activation='leaky',bnorm=False, virt_bnorm=False):
+    def conv_block(self,in_depth,out_depth,ksize=3,stride=1,padding=1,activation='leaky',bnorm=False, vbnorm=False):
         block = []
         block.append(nn.Conv2d(in_depth, out_depth, ksize, stride=stride, padding=padding))
         if activation is None:
@@ -89,24 +89,9 @@ class Discriminator(nn.Module):
             block.append(nn.Tanh())
         elif activation.lower() == 'leaky':
             block.append(nn.LeakyReLU(negative_slope=0.05))
-        if bnorm:
-            if virt_bnorm:
+        if bnorm or vbnorm:
+            if vbnorm:
                 block.append(VirtBatchNorm2d(out_depth))
             else:
                 block.append(nn.BatchNorm2d(out_depth))
         return nn.Sequential(*block)
-
-    def res_block(self, in_depth, out_depth, ksize=3, padding=1, activation='relu', bnorm=False):
-        block = []
-        block.append(nn.Conv2d(in_depth, out_depth, ksize, padding=padding))
-        if activation is None:
-            pass
-        elif activation.lower() == 'relu':
-            block.append(nn.ReLU())
-        elif activation.lower() == 'tanh':
-            block.append(nn.Tanh())
-        if bnorm:
-            block.append(nn.BatchNorm2d(out_depth))
-        block.append(nn.Conv2d(out_depth, in_depth, ksize, padding=padding))
-        return nn.Sequential(*block)
-
