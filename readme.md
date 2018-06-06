@@ -13,12 +13,37 @@ A reason for these benefits is that the Wasserstein Distance is continuous and d
 
 ## WGAN Results
 ### CIFAR10
+![cifar10 image1](./readme_imgs/cifar10_img1.png)
+![cifar10 image2](./readme_imgs/cifar10_img2.png)
+![cifar10 image3](./readme_imgs/cifar10_img3.png)
+![cifar10 image4](./readme_imgs/cifar10_img4.png)
+![cifar10 image5](./readme_imgs/cifar10_img5.png)
+![cifar10 image6](./readme_imgs/cifar10_img6.png)
+![cifar10 image7](./readme_imgs/cifar10_img7.png)
 
-
-### GERMAN TRAFFIC SIGNS
-
+### German Traffic Signs
+![traffic data image1](./readme_imgs/traffic_img1.png)
+![traffic data image2](./readme_imgs/traffic_img2.png)
+![traffic data image3](./readme_imgs/traffic_img3.png)
+![traffic data image4](./readme_imgs/traffic_img4.png)
+![traffic data image5](./readme_imgs/traffic_img5.png)
+![traffic data image6](./readme_imgs/traffic_img6.png)
+![traffic data image7](./readme_imgs/traffic_img7.png)
 
 ### MNIST
+![mnist image1](./readme_imgs/mnist_img1.png)
+![mnist image2](./readme_imgs/mnist_img2.png)
+![mnist image3](./readme_imgs/mnist_img3.png)
+![mnist image4](./readme_imgs/mnist_img4.png)
+![mnist image5](./readme_imgs/mnist_img5.png)
+![mnist image6](./readme_imgs/mnist_img6.png)
+![mnist image7](./readme_imgs/mnist_img7.png)
+
+#### MNIST Loss Figures
+![MNIST Losses](./readme_imgs/mnist_losses_figure.png)
+![MNIST Loss Difference](./readme_imgs/mnist_diff_figure.png)
+
+Loss difference is calculated as the difference between the loss from the real data and the loss from the generated data.
 
 
 ### Sources:
