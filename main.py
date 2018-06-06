@@ -36,7 +36,7 @@ def save_imgs(fakes, save_root):
 
 if __name__ == "__main__":
 
-    save_root = "biggenadam" # Root name to save various datas to
+    save_root = "cifar10" # Root name to save various datas to
     img_folder = save_root+"_imgs" # Name of folder to collect images created from GAN
     if not os.path.exists(img_folder):
         os.makedirs(img_folder)
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     lambda_ = 10 # Scaling constant used in Imrpoved Training of WGANs https://arxiv.org/abs/1704.00028
     z_size = 100 # Size of the initial randomly sampled vector for the generator
     model_type = 'conv' # Currently conv is the only option
-    optim_type = 'adam' # Available options are 'adam' and 'rmsprop'
+    optim_type = 'rmsprop' # Available options are 'adam' and 'rmsprop'
     improved_training = True # if true, uses this approach to training: https://arxiv.org/abs/1704.00028
     use_tanh = False # If set to true uses a tanh on the outputs of the generator
     scale = False # If set to true, scales the real dataset by 1/255
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     gen_vbnorm = False # Uses virtual batch norm in the generator
     process = True # If set to true, normalizes the real dataset using a mean and std calculated over the entire dataset
     resume = False # If true, resumes training of the network under the save_root name
-    data_type = "traffic" # Dataset options include traffic, cifar10, and mnist
+    data_type = "cifar10" # Dataset options include traffic, cifar10, and mnist
 
     if "traffic" == data_type:
         data_loc = "/home/grantsrb/machine_learning/datasets/traffic_sign_data"
